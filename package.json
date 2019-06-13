@@ -1,0 +1,14 @@
+{
+  "name": "substrate-overlay-token-bridge",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "git@github.com:team-crypto/substrate-overlay-token-bridge.git",
+  "author": "Nagato Kasaki <kasaki-nagato@dmm.com>",
+  "license": "MIT",
+  "scripts": {
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "@polkadot/api": "^0.80.1"
+  }
+}
