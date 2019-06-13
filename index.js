@@ -15,13 +15,25 @@ async function main () {
     }
   })
 
-  let totalSupply = await api.query.token.totalSupply();
-  console.log(`Token Total Supply: ${totalSupply}`);
-
-  await showBalances(api);
+  await showTokenStatus(api);
+  await showTokenBalances(api);
 }
 
-async function showBalances(api) {
+async function showTokenStatus(api) {
+  console.log(`=== show token status ===`);
+
+  let init = await api.query.token.init();
+  let totalSupply = await api.query.token.totalSupply();
+  let localSupply = await api.query.token.localSupply();
+
+  console.log(`Token init status: ${init}`);
+  console.log(`Token Total Supply: ${totalSupply}`);
+  console.log(`Token Local Supply: ${localSupply}`);
+}
+
+async function showTokenBalances(api) {
+  console.log(`=== show token balances ===`);
+
   let balanceOf = {};
   balanceOf[Alice] = await api.query.token.balanceOf(Alice);
   balanceOf[Bob] = await api.query.token.balanceOf(Bob);
