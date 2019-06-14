@@ -1,5 +1,5 @@
 // Import the API, Keyring and some utility functions
-const { ApiPromise } = require('@polkadot/api');
+const { ApiPromise, WsProvider } = require('@polkadot/api');
 const { Keyring } = require('@polkadot/keyring');
 
 // Known account we want to use (available on dev chain, with funds)
@@ -9,6 +9,7 @@ const Bob = '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty';
 async function main () {
   // Create an await for the API
   const api = await ApiPromise.create({
+    provider: new WsProvider('ws://127.0.0.1:9944'),
     // Add custom types
     types: {
       TokenBalance: "u128",
