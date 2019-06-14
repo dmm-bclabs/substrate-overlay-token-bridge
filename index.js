@@ -6,15 +6,21 @@ const { Keyring } = require('@polkadot/keyring');
 const Alice = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY';
 const Bob = '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty';
 
+const customTypes = {
+  TokenBalance: "u128",
+  ChildChainId: "u32"
+};
+
 async function main () {
-  // Create an await for the API
-  const api = await ApiPromise.create({
-    provider: new WsProvider('ws://127.0.0.1:9944'),
-    // Add custom types
-    types: {
-      TokenBalance: "u128",
-      ChildChainId: "u32"
-    }
+  const parent = 'ws://127.0.0.1:9944';
+  const child = 'ws://127.0.0.1:9945';
+  const parentApi = await ApiPromise.create({
+    provider: new WsProvider(parent),
+    types: customTypes
+  });
+  const childApi = await ApiPromise.create({
+    provider: new WsProvider(child),
+    types: customTypes
   });
 
   // Constuct the keying after the API (crypto has an async init)
@@ -22,15 +28,21 @@ async function main () {
   // Add alice to our keyring with a hard-deived path (empty phrase, so uses dev)
   const alice = keyring.addFromUri('//Alice');
 
-  // Watch the token balance of Alice
-  api.query.token.balanceOf(Alice, async () => {
-    await showTokenStatus(api);
-    await showTokenBalances(api);
+  let previous = await childApi.query.token.parentSupply();
+  console.log(`parentSupply on the child chain: ${previous}`);
+
+  let previous2 = await parentApi.query.token.parentSupply();
+  console.log(`parentSupply on the parent chain: ${previous2}`);
+
+  // Watch send token from child to parent
+  childApi.query.token.parentSupply(async (current) => {
+    let change = current.sub(previous);
+
+    if (!change.isZero()) {
+      previous = current;
+      console.log(`New parentSupply on the child chain: ${current}`);
+    }
   });
-
-  // await mintToken(api, alice, 5000);
-
-  await sendToken(api, alice, Bob, 2000);
 }
 
 async function showTokenStatus(api) {
@@ -38,12 +50,16 @@ async function showTokenStatus(api) {
   let init = await api.query.token.init();
   let totalSupply = await api.query.token.totalSupply();
   let localSupply = await api.query.token.localSupply();
+  let owner = await api.query.token.owner();
+  let parentSupply = await api.query.token.parentSupply();
 
   console.log(`=== show token status ===`);
   console.log(`Timestamp: ${now}`);
   console.log(`Token init status: ${init}`);
   console.log(`Token total supply: ${totalSupply}`);
   console.log(`Token local supply: ${localSupply}`);
+  console.log(`Token parent supply: ${parentSupply}`);
+  console.log(`Token owner: ${owner}`);
   console.log('');
 }
 
