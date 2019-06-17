@@ -75,7 +75,7 @@ async function main () {
 
     if (!change.isZero()) {
       supplies.parent.totalSupply = current;
-      console.log(`¥nNew totalSupply on the parent chain: ${current}`);
+      console.log(`New totalSupply on the parent chain: ${current}`);
       let diff = supplies.parent.totalSupply.sub(supplies.child.totalSupply);
 
       if (!diff.isZero()) {
@@ -95,10 +95,8 @@ async function main () {
 
     if (!change.isZero()) {
       supplies.child.totalSupply = current;
-      console.log(`¥nNew totalSupply on the child chain: ${current}`);
+      console.log(`New totalSupply on the child chain: ${current}`);
       let diff = supplies.child.totalSupply.sub(supplies.parent.totalSupply);
-      console.log(diff);
-      console.log(diff.isNeg());
 
       if (!diff.isZero()) {
         // update total supply on the child
