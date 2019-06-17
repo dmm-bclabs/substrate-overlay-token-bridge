@@ -28,21 +28,88 @@ async function main () {
   // Add alice to our keyring with a hard-deived path (empty phrase, so uses dev)
   const alice = keyring.addFromUri('//Alice');
 
-  let previous = await childApi.query.token.parentSupply();
-  console.log(`parentSupply on the child chain: ${previous}`);
+  let supplies = {
+    parent: {
+      totalSupply: 0,
+      childSupply: 0
+    },
+    child: {
+      totalSupply: 0,
+      parentSupply: 0
+    }
+  }
 
-  let previous2 = await parentApi.query.token.parentSupply();
-  console.log(`parentSupply on the parent chain: ${previous2}`);
+  supplies.child.totalSupply = await childApi.query.token.totalSupply();
+  supplies.child.parentSupply = await childApi.query.token.parentSupply();
+  console.log(`totalSupply on the child chain: ${supplies.child.totalSupply}`);
+  console.log(`parentSupply on the child chain: ${supplies.child.parentSupply}`);
 
   // Watch send token from child to parent
-  childApi.query.token.parentSupply(async (current) => {
-    let change = current.sub(previous);
+  // childApi.query.token.parentSupply(async (current) => {
+  //   let change = current.sub(supplies.child.parentSupply);
+
+  //   if (!change.isZero()) {
+  //     previous = current;
+  //     console.log(`New parentSupply on the child chain: ${current}`);
+  //   }
+  // });
+
+  supplies.parent.totalSupply = await parentApi.query.token.totalSupply();
+  supplies.parent.childSupply = await parentApi.query.token.childSupplies(1);
+  console.log(`totalSupply on the parent chain: ${supplies.parent.totalSupply}`);
+  console.log(`childSupply on the parent chain: ${supplies.parent.childSupply}`);
+
+  // Watch send toke from parent to child
+  // parentApi.query.token.childSupplies(0, async (current) => {
+  //   let change = current.sub(supplies.parent.childSupply);
+
+  //   if (!change.isZero()) {
+  //     previous = current;
+  //     console.log(`New childSupply on the parent chain: ${current}`);
+  //   }
+  // })
+
+  // Watch total supply on the parent
+  parentApi.query.token.totalSupply(async (current) => {
+    let change = current.sub(supplies.parent.totalSupply);
 
     if (!change.isZero()) {
-      previous = current;
-      console.log(`New parentSupply on the child chain: ${current}`);
+      supplies.parent.totalSupply = current;
+      console.log(`¥nNew totalSupply on the parent chain: ${current}`);
+      let diff = supplies.parent.totalSupply.sub(supplies.child.totalSupply);
+
+      if (!diff.isZero()) {
+        // update total supply on the child
+        if (diff.isNeg()) {
+          burnToken(childApi, alice, diff.abs());
+        } else {
+          mintToken(childApi, alice, diff.abs());
+        }
+      }
     }
-  });
+  })
+
+  // Watch total supply on the child
+  childApi.query.token.totalSupply(async (current) => {
+    let change = current.sub(supplies.child.totalSupply);
+
+    if (!change.isZero()) {
+      supplies.child.totalSupply = current;
+      console.log(`¥nNew totalSupply on the child chain: ${current}`);
+      let diff = supplies.child.totalSupply.sub(supplies.parent.totalSupply);
+      console.log(diff);
+      console.log(diff.isNeg());
+
+      if (!diff.isZero()) {
+        // update total supply on the child
+        if (diff.isNeg()) {
+          burnToken(parentApi, alice, diff.abs());
+        } else {
+          mintToken(parentApi, alice, diff.abs());
+        }
+      }
+    }
+  })
 }
 
 async function showTokenStatus(api) {
@@ -80,6 +147,15 @@ async function mintToken(api, owner, value) {
 
   console.log('=== mint token ===');
   console.log(`Mint ${value} token with hash: ${hash.toHex()}`);
+  console.log('');
+}
+
+async function burnToken(api, owner, value) {
+  const tx = api.tx.token.burn(value);
+  const hash = await tx.signAndSend(owner);
+
+  console.log('=== burn token ===');
+  console.log(`Burn ${value} token with hash: ${hash.toHex()}`);
   console.log('');
 }
 
