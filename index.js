@@ -49,25 +49,26 @@ async function main () {
   //   let change = current.sub(supplies.child.parentSupply);
 
   //   if (!change.isZero()) {
-  //     previous = current;
+  //     supplies.child.parentSupply = current;
   //     console.log(`New parentSupply on the child chain: ${current}`);
   //   }
   // });
 
   supplies.parent.totalSupply = await parentApi.query.token.totalSupply();
-  supplies.parent.childSupply = await parentApi.query.token.childSupplies(1);
+  supplies.parent.childSupply = await parentApi.query.token.childSupplies(0);
   console.log(`totalSupply on the parent chain: ${supplies.parent.totalSupply}`);
   console.log(`childSupply on the parent chain: ${supplies.parent.childSupply}`);
 
   // Watch send toke from parent to child
-  // parentApi.query.token.childSupplies(0, async (current) => {
-  //   let change = current.sub(supplies.parent.childSupply);
+  parentApi.query.token.childSupplies(0, async (current) => {
+    let change = current.sub(supplies.parent.childSupply);
 
-  //   if (!change.isZero()) {
-  //     previous = current;
-  //     console.log(`New childSupply on the parent chain: ${current}`);
-  //   }
-  // })
+    if (!change.isZero()) {
+      supplies.parent.childSupply = current;
+      console.log(`New childSupply on the parent chain: ${current}`);
+      receiveFromParent(childApi, alice, change);
+    }
+  })
 
   // Watch total supply on the parent
   parentApi.query.token.totalSupply(async (current) => {
@@ -96,16 +97,6 @@ async function main () {
     if (!change.isZero()) {
       supplies.child.totalSupply = current;
       console.log(`New totalSupply on the child chain: ${current}`);
-      let diff = supplies.child.totalSupply.sub(supplies.parent.totalSupply);
-
-      if (!diff.isZero()) {
-        // update total supply on the child
-        if (diff.isNeg()) {
-          burnToken(parentApi, alice, diff.abs());
-        } else {
-          mintToken(parentApi, alice, diff.abs());
-        }
-      }
     }
   })
 }
@@ -165,6 +156,15 @@ async function sendToken(api, sender, receiver, value) {
 
   console.log('=== send token ===');
   console.log(`Transfer ${value} token sent with hash: ${hash.toHex()}`);
+  console.log('');
+}
+
+async function receiveFromParent(api, sender, value) {
+  const tx = api.tx.token.receiveFromParent(value);
+  const hash = await tx.signAndSend(sender);
+
+  console.log('=== send receive from parent ===');
+  console.log(`Receive ${value} token from parent with hash: ${hash.toHex()}`);
   console.log('');
 }
 
