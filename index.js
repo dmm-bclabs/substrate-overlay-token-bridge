@@ -30,43 +30,84 @@ async function main () {
 
   let supplies = {
     parent: {
+      init: false,
       totalSupply: 0,
-      childSupply: 0
+      localSupply: 0,
+      childSupply: 0,
     },
     child: {
+      init: false,
       totalSupply: 0,
-      parentSupply: 0
+      localSupply: 0,
+      parentSupply: 0,
     }
   }
 
-  supplies.child.totalSupply = await childApi.query.token.totalSupply();
-  supplies.child.parentSupply = await childApi.query.token.parentSupply();
-  console.log(`totalSupply on the child chain: ${supplies.child.totalSupply}`);
-  console.log(`parentSupply on the child chain: ${supplies.child.parentSupply}`);
-
-  // Watch send token from child to parent
-  // childApi.query.token.parentSupply(async (current) => {
-  //   let change = current.sub(supplies.child.parentSupply);
-
-  //   if (!change.isZero()) {
-  //     supplies.child.parentSupply = current;
-  //     console.log(`New parentSupply on the child chain: ${current}`);
-  //   }
-  // });
-
+  supplies.parent.init = await parentApi.query.token.init();
   supplies.parent.totalSupply = await parentApi.query.token.totalSupply();
+  supplies.parent.localSupply = await parentApi.query.token.localSupply();
   supplies.parent.childSupply = await parentApi.query.token.childSupplies(0);
+  console.log(`init status on the parent chain: ${supplies.parent.init}`);
   console.log(`totalSupply on the parent chain: ${supplies.parent.totalSupply}`);
+  console.log(`localSupply on the parent chain: ${supplies.parent.localSupply}`);
   console.log(`childSupply on the parent chain: ${supplies.parent.childSupply}`);
 
-  // Watch send toke from parent to child
+  supplies.child.init = await childApi.query.token.init();
+  supplies.child.totalSupply = await childApi.query.token.totalSupply();
+  supplies.child.localSupply = await childApi.query.token.localSupply();
+  supplies.child.parentSupply = await childApi.query.token.parentSupply();
+  console.log(`init status on the child chain: ${supplies.child.init}`);
+  console.log(`totalSupply on the child chain: ${supplies.child.totalSupply}`);
+  console.log(`localSupply on the child chain: ${supplies.child.localSupply}`);
+  console.log(`parentSupply on the child chain: ${supplies.child.parentSupply}`);
+
+  parentApi.query.token.init(async (init) => {
+    supplies.parent.init = init;
+    if (supplies.parent.init.valueOf() && supplies.child.init.valueOf()) {
+      console.log(1)
+      syncTokenStatus(parentApi, childApi, supplies, alice);
+    }
+  })
+
+  childApi.query.token.init(async (init) => {
+    supplies.child.init = init;
+    if (supplies.parent.init.valueOf() && supplies.child.init.valueOf()) {
+     syncTokenStatus(parentApi, childApi, supplies, alice);
+    }
+  })
+}
+
+function syncTokenStatus(parentApi, childApi, supplies, owner) {
+  syncTokenStatus = function() {};
+  console.log("watch start");
+
+  // Watch send token from parent to child
   parentApi.query.token.childSupplies(0, async (current) => {
     let change = current.sub(supplies.parent.childSupply);
+    let local = await parentApi.query.token.localSupply();
+    let localChange = local.sub(supplies.parent.localSupply);
+    supplies.parent.childSupply = current;
+    supplies.parent.localSupply = local;
 
-    if (!change.isZero()) {
-      supplies.parent.childSupply = current;
+    // Detect send token from parent to child
+    if (!change.isZero() && !change.isNeg() && localChange.isNeg()) {
       console.log(`New childSupply on the parent chain: ${current}`);
-      receiveFromParent(childApi, alice, change);
+      receiveFromParent(childApi, owner, change);
+    }
+  })
+
+  // Watch send token from child to parent
+  childApi.query.token.parentSupply(async (current) => {
+    let change = current.sub(supplies.child.parentSupply);
+    let local = await childApi.query.token.localSupply();
+    let localChange = local.sub(supplies.child.localSupply);
+    supplies.child.parentSupply = current;
+    supplies.child.localSupply = local;
+
+    // Detect send token child to parent
+    if (!change.isZero() && !change.isNeg() && localChange.isNeg()) {
+      console.log(`New childSupply on the parent chain: ${current}`);
+      receiveFromChild(parentApi, owner, change);
     }
   })
 
@@ -76,15 +117,16 @@ async function main () {
 
     if (!change.isZero()) {
       supplies.parent.totalSupply = current;
+      supplies.parent.localSupply = await parentApi.query.token.localSupply();
       console.log(`New totalSupply on the parent chain: ${current}`);
       let diff = supplies.parent.totalSupply.sub(supplies.child.totalSupply);
 
       if (!diff.isZero()) {
         // update total supply on the child
         if (diff.isNeg()) {
-          burnToken(childApi, alice, diff.abs());
+          burnToken(childApi, owner, diff.abs());
         } else {
-          mintToken(childApi, alice, diff.abs());
+          mintToken(childApi, owner, diff.abs());
         }
       }
     }
@@ -165,6 +207,15 @@ async function receiveFromParent(api, sender, value) {
 
   console.log('=== send receive from parent ===');
   console.log(`Receive ${value} token from parent with hash: ${hash.toHex()}`);
+  console.log('');
+}
+
+async function receiveFromChild(api, sender, value) {
+  const tx = api.tx.token.receiveFromChild(0, value);
+  const hash = await tx.signAndSend(sender);
+
+  console.log('=== send receive from child ===');
+  console.log(`Receive ${value} token from child with hash: ${hash.toHex()}`);
   console.log('');
 }
 
