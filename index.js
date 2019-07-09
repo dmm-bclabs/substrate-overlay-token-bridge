@@ -12,8 +12,8 @@ const customTypes = {
 };
 
 async function main () {
-  const parent = 'ws://127.0.0.1:9944';
-  const child = 'ws://127.0.0.1:9945';
+  const parent = process.env.PARENT;
+  const child = process.env.CHILD;
   const parentApi = await ApiPromise.create({
     provider: new WsProvider(parent),
     types: customTypes
