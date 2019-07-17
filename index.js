@@ -12,8 +12,8 @@ const customTypes = {
 };
 
 async function main () {
-  const parent = process.env.PARENT;
-  const child = process.env.CHILD;
+  const parent = process.env.PARENT || 'ws://127.0.0.1:9944';
+  const child = process.env.CHILD || 'ws://127.0.0.1:9945';
   const parentApi = await ApiPromise.create({
     provider: new WsProvider(parent),
     types: customTypes
@@ -28,119 +28,87 @@ async function main () {
   // Add alice to our keyring with a hard-deived path (empty phrase, so uses dev)
   const alice = keyring.addFromUri('//Alice');
 
-  let supplies = {
-    parent: {
-      init: false,
-      totalSupply: 0,
-      localSupply: 0,
-      childSupply: 0,
-    },
-    child: {
-      init: false,
-      totalSupply: 0,
-      localSupply: 0,
-      parentSupply: 0,
-    }
-  }
+  var initStatus = {
+    parent: false,
+    child: false
+  };
 
-  supplies.parent.init = await parentApi.query.token.init();
-  supplies.parent.totalSupply = await parentApi.query.token.totalSupply();
-  supplies.parent.localSupply = await parentApi.query.token.localSupply();
-  supplies.parent.childSupply = await parentApi.query.token.childSupplies(0);
-  console.log(`init status on the parent chain: ${supplies.parent.init}`);
-  console.log(`totalSupply on the parent chain: ${supplies.parent.totalSupply}`);
-  console.log(`localSupply on the parent chain: ${supplies.parent.localSupply}`);
-  console.log(`childSupply on the parent chain: ${supplies.parent.childSupply}`);
+  console.log(`Parent: ${parent}`);
+  await showTokenStatus(parentApi);
+  console.log(`Child: ${child}`);
+  await showTokenStatus(childApi);
 
-  supplies.child.init = await childApi.query.token.init();
-  supplies.child.totalSupply = await childApi.query.token.totalSupply();
-  supplies.child.localSupply = await childApi.query.token.localSupply();
-  supplies.child.parentSupply = await childApi.query.token.parentSupply();
-  console.log(`init status on the child chain: ${supplies.child.init}`);
-  console.log(`totalSupply on the child chain: ${supplies.child.totalSupply}`);
-  console.log(`localSupply on the child chain: ${supplies.child.localSupply}`);
-  console.log(`parentSupply on the child chain: ${supplies.child.parentSupply}`);
-
-  parentApi.query.token.init(async (init) => {
-    supplies.parent.init = init;
-    if (supplies.parent.init.valueOf() && supplies.child.init.valueOf()) {
-      console.log(1)
-      syncTokenStatus(parentApi, childApi, supplies, alice);
+  parentApi.query.token.init(async (parentInit) => {
+    let childInit = await childApi.query.token.init();
+    if (parentInit.valueOf() && childInit.valueOf()) {
+      syncTokenStatus(parentApi, childApi, alice);
     }
   })
 
-  childApi.query.token.init(async (init) => {
-    supplies.child.init = init;
-    if (supplies.parent.init.valueOf() && supplies.child.init.valueOf()) {
-     syncTokenStatus(parentApi, childApi, supplies, alice);
+  childApi.query.token.init(async (childInit) => {
+    let parentInit = await parentApi.query.token.init();
+    if (parentInit.valueOf() && childInit.valueOf()) {
+      syncTokenStatus(parentApi, childApi, alice);
     }
   })
 }
 
-function syncTokenStatus(parentApi, childApi, supplies, owner) {
+function syncTokenStatus(parentApi, childApi, owner) {
   syncTokenStatus = function() {};
   console.log("watch start");
 
-  // Watch send token from parent to child
-  parentApi.query.token.childSupplies(0, async (current) => {
-    let change = current.sub(supplies.parent.childSupply);
-    let local = await parentApi.query.token.localSupply();
-    let localChange = local.sub(supplies.parent.localSupply);
-    supplies.parent.childSupply = current;
-    supplies.parent.localSupply = local;
+  // watch parent
+  parentApi.query.system.events((events) => {
+    // loop through the Vec<EventRecord>
+    events.forEach((record) => {
+      // extract the phase, event and the event types
+      const { event, phase } = record;
+      const types = event.typeDef;
 
-    // Detect send token from parent to child
-    if (!change.isZero() && !change.isNeg() && localChange.isNeg()) {
-      console.log(`New childSupply on the parent chain: ${current}`);
-      receiveFromParent(childApi, owner, change);
-    }
-  })
-
-  // Watch send token from child to parent
-  childApi.query.token.parentSupply(async (current) => {
-    let change = current.sub(supplies.child.parentSupply);
-    let local = await childApi.query.token.localSupply();
-    let localChange = local.sub(supplies.child.localSupply);
-    supplies.child.parentSupply = current;
-    supplies.child.localSupply = local;
-
-    // Detect send token child to parent
-    if (!change.isZero() && !change.isNeg() && localChange.isNeg()) {
-      console.log(`New childSupply on the parent chain: ${current}`);
-      receiveFromChild(parentApi, owner, change);
-    }
-  })
-
-  // Watch total supply on the parent
-  parentApi.query.token.totalSupply(async (current) => {
-    let change = current.sub(supplies.parent.totalSupply);
-
-    if (!change.isZero()) {
-      supplies.parent.totalSupply = current;
-      supplies.parent.localSupply = await parentApi.query.token.localSupply();
-      console.log(`New totalSupply on the parent chain: ${current}`);
-      let diff = supplies.parent.totalSupply.sub(supplies.child.totalSupply);
-
-      if (!diff.isZero()) {
-        // update total supply on the child
-        if (diff.isNeg()) {
-          burnToken(childApi, owner, diff.abs());
-        } else {
-          mintToken(childApi, owner, diff.abs());
-        }
+      switch(`${event.section}:${event.method}`) {
+        case 'token:Minted':
+          console.log('Parent: Mint');
+          console.log(`Amount: ${event.data[0]}`);
+          mintToken(childApi, owner, event.data[0]);
+          break;
+        case 'token:Burned':
+          console.log('Parent: Burn');
+          console.log(`Amount: ${event.data[0]}`);
+          burnToken(childApi, owner, event.data[0]);
+          break;
+        case 'token:SentToChild':
+          console.log('Parent: SentToChild');
+          console.log(`ChildId: ${event.data[0]}`);
+          console.log(`Address: ${event.data[1]}`);
+          console.log(`Amount: ${event.data[2]}`);
+          receiveFromParent(childApi, owner, event.data[2]);
+          break;
+      default:
+        break;
       }
-    }
-  })
+    });
+  });
 
-  // Watch total supply on the child
-  childApi.query.token.totalSupply(async (current) => {
-    let change = current.sub(supplies.child.totalSupply);
+  // watch child
+  childApi.query.system.events((events) => {
+    // loop through the Vec<EventRecord>
+    events.forEach((record) => {
+      // extract the phase, event and the event types
+      const { event, phase } = record;
+      const types = event.typeDef;
 
-    if (!change.isZero()) {
-      supplies.child.totalSupply = current;
-      console.log(`New totalSupply on the child chain: ${current}`);
-    }
-  })
+      switch(`${event.section}:${event.method}`) {
+        case 'token:SentToParent':
+          console.log('Child: SentToParent');
+          console.log(`Address: ${event.data[0]}`);
+          console.log(`Amount: ${event.data[1]}`);
+          receiveFromChild(parentApi, owner, event.data[1]);
+          break;
+      default:
+        break;
+      }
+    });
+  });
 }
 
 async function showTokenStatus(api) {
@@ -161,17 +129,6 @@ async function showTokenStatus(api) {
   console.log('');
 }
 
-async function showTokenBalances(api) {
-  let balanceOf = {};
-  balanceOf[Alice] = await api.query.token.balanceOf(Alice);
-  balanceOf[Bob] = await api.query.token.balanceOf(Bob);
-
-  console.log(`=== show token balances ===`);
-  console.log(`Balance of Alice: ${balanceOf[Alice]}`);
-  console.log(`Balance of Bob: ${balanceOf[Bob]}`);
-  console.log('');
-}
-
 async function mintToken(api, owner, value) {
   const tx = api.tx.token.mint(value);
   const hash = await tx.signAndSend(owner);
@@ -187,17 +144,6 @@ async function burnToken(api, owner, value) {
 
   console.log('=== burn token ===');
   console.log(`Burn ${value} token with hash: ${hash.toHex()}`);
-  console.log('');
-}
-
-async function sendToken(api, sender, receiver, value) {
-  // Create a extrinsic, transferring tokens to the receiver
-  const transfer = api.tx.token.transfer(receiver, value);
-  // Sign and send the transaction using our account
-  const hash = await transfer.signAndSend(sender);
-
-  console.log('=== send token ===');
-  console.log(`Transfer ${value} token sent with hash: ${hash.toHex()}`);
   console.log('');
 }
 
