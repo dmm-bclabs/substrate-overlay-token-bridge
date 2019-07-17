@@ -28,11 +28,6 @@ async function main () {
   // Add alice to our keyring with a hard-deived path (empty phrase, so uses dev)
   const alice = keyring.addFromUri('//Alice');
 
-  var initStatus = {
-    parent: false,
-    child: false
-  };
-
   console.log(`Parent: ${parent}`);
   await showTokenStatus(parentApi);
   console.log(`Child: ${child}`);
