@@ -1,5 +1,11 @@
 # substrate-overlay-token-bridge
 
+## document
+
+https://github.com/dmm-bclabs/overlay-token
+
+## setup
+
 ```
 $ yarn install
 $ yarn run dev
