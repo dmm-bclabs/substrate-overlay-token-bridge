@@ -76,7 +76,7 @@ function syncTokenStatus(parentApi, childApi, owner) {
           console.log(`ChildId: ${event.data[0]}`);
           console.log(`Address: ${event.data[1]}`);
           console.log(`Amount: ${event.data[2]}`);
-          receiveFromParent(childApi, owner, event.data[2]);
+          receiveFromParent(childApi, owner, event.data[1], event.data[2]);
           break;
       default:
         break;
@@ -97,7 +97,7 @@ function syncTokenStatus(parentApi, childApi, owner) {
           console.log('Child: SentToParent');
           console.log(`Address: ${event.data[0]}`);
           console.log(`Amount: ${event.data[1]}`);
-          receiveFromChild(parentApi, owner, event.data[1]);
+          receiveFromChild(parentApi, owner, event.data[0], event.data[1]);
           break;
       default:
         break;
@@ -142,18 +142,18 @@ async function burnToken(api, owner, value) {
   console.log('');
 }
 
-async function receiveFromParent(api, sender, value) {
-  const tx = api.tx.token.receiveFromParent(value);
-  const hash = await tx.signAndSend(sender);
+async function receiveFromParent(api, owner, receiver, value) {
+  const tx = api.tx.token.receiveFromParent(receiver, value);
+  const hash = await tx.signAndSend(owner);
 
   console.log('=== send receive from parent ===');
   console.log(`Receive ${value} token from parent with hash: ${hash.toHex()}`);
   console.log('');
 }
 
-async function receiveFromChild(api, sender, value) {
-  const tx = api.tx.token.receiveFromChild(0, value);
-  const hash = await tx.signAndSend(sender);
+async function receiveFromChild(api, owner, receiver, value) {
+  const tx = api.tx.token.receiveFromChild(0, receiver, value);
+  const hash = await tx.signAndSend(owner);
 
   console.log('=== send receive from child ===');
   console.log(`Receive ${value} token from child with hash: ${hash.toHex()}`);
